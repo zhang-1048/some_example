@@ -1,0 +1,65 @@
+from gensim import corpora, models, similarities
+import numpy as np
+
+stop_word = []
+with open("../../install_data/stopword.txt") as f:
+    s = f.read()
+    stop_word.append(s.replace("\n"," "))
+    useless_char = ['，','（','“','吗',  '）','”','「','」', '','：','▲', '、','—','11949285', '责任编辑','DF522',
+     'DF526', ')','(','DF506','①', 'DF120',"的","","\u3000"," "]
+
+stop_words = stop_word[0].split(" ")
+# stop_words
+
+def seg_depart(sentence):
+    sentence_depart = jieba.cut(sentence)
+    stopwords = []
+    outstr = ''
+    for word in sentence_depart:
+        if word not in stop_word and len(word)>1 and word not in useless_char:
+            outstr += word
+            outstr += " "
+    # outstr：'黄蜂 湖人 首发 科比 带伤 战 保罗 加索尔 ...'       
+    return outstr
+    
+train = []
+for line in posttag_word_list:
+    c = seg_depart(line).split(" ")
+    train.append(c[:-1])
+    # train: [['黄蜂', '湖人', '首发', '科比', '带伤', '战',...],[...],...]
+    
+dictionary = corpora.Dictionary(train)
+corpus = [dictionary.doc2bow(text) for text in train]
+lda = models.LdaModel(corpus=corpus, id2word=dictionary, num_topics=4,iterations=10000)
+
+# 将每个文本的话题类别定义为词典，；例如{"1":[text1,text2],"2":[text2,text3]}
+topic_dict = {}
+x = lda.get_document_topics(corpus) 
+for index in range(len(x)):
+    s = x[index]
+    k = [i[0] for i in s]
+    v = [i[1] for i in s]
+    imax = k[np.argmax(np.array(v))]
+    if imax in topic_dict.keys():
+        topic_dict[imax].append(posttag_word_list[index])
+    else:
+        topic_dict[imax]=[]
+        topic_dict[imax].append(posttag_word_list[index])
+
+# topic_dict
+topic_list = lda.print_topics(4)
+print("4个主题的单词分布为：\n")
+for topic in topic_list:
+    print(topic)
+    n_list = []
+    for k in topic_dict[topic[0]]:
+        n_list.append(k.replace("　",""))
+    zx = sorted(list(set(n_list)),key = lambda i:len(i),reverse=True)
+    for i in zx:
+        for query_k,query_v in query_sent_list.items():
+            if i in query_v:
+                print(i.replace(" ","").replace("　",""),",",query_k)
+                break
+        
+
+

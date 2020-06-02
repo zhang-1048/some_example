@@ -1,0 +1,159 @@
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import BernoulliNB
+import random
+from sklearn.metrics import recall_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import precision_score
+
+
+def process_data(ywnr_list, stop_word):  # 分词，去高频词等
+    # 替换文中数字，统一变为 NUM
+    num_regex_list = re.compile('\d{1,12}')
+    def replace_num(text):
+        res = re.findall(num_regex_list,text)
+        if len(res)>0:
+            new_t = reversed(res)
+            for i in new_t:
+                text = text.replace(i,'NUM')
+        return text
+    
+    cut_y = []
+    for i in range(len(ywnr_list)):
+        cut_y.append(list(jieba.cut(replace_num(ywnr_list[i]))))
+
+    def remove_dupi(_str):  #去除连续重复的字符串，如["#","#","a"]--->["#","a"]
+        _list = list(_str)
+        n = len(_list)
+        if n <= 1:
+            return _list
+        list1 = []
+        for i in range(n-1):
+            if _list[i] != _list[i+1]:
+                list1.append(_list[i])
+        list1.append(_list[-1])
+        return list1
+
+    useless_char = ['！','，', '？', '。', '/', '】', '--', '.', '--', '-', ' ', '!', '”',',','wnvt','fvec','送','A','锦州市','昌图县',
+                '【', '@ ',':', '；', '@','~', '（', '）', '、', ')', '(','D', ' ', '，','“', '：','：','年','月','日']
+    
+    stop_words=stop_word
+    new_list = cut_y
+    for i in range(len(new_list)):
+        new_list[i] = [x for x in new_list[i] if x not in useless_char]
+        new_list[i] = [x for x in new_list[i] if x not in stop_words]
+        new_list[i] = ["NUM"  if "NUM" in x else x for x in new_list[i]]
+        new_list[i] = remove_dupi(new_list[i])
+
+    return new_list
+    
+    
+def words_dict(all_words_list,all_words_nums, deleteN,min_num,max_num):
+    feature_words = []
+    for t in range(deleteN, len(all_words_list)): #去掉词频较高的前deleteN个词，可能是停用词或比较normal的词
+        if 0<len(all_words_list[t])<5 and min_num<all_words_nums[t]<max_num:   # len(all_words_list[t]) 词语的长度，all_words_nums[t]该词出现的次数
+            feature_words.append(all_words_list[t])
+    res = list(set(feature_words))
+    return res
+
+
+def TextFeatures(train_data_list, test_data_list, feature_words):
+    def text_features(text, feature_words):  # 出现在特征集中，则置1
+        text_words = set(text)
+        features = [1 if word in text_words else 0 for word in feature_words]
+        return features
+
+    train_feature_list = [text_features(text, feature_words) for text in train_data_list]
+    test_feature_list = [text_features(text, feature_words) for text in test_data_list]
+    return train_feature_list, test_feature_list  # 返回结果
+
+
+def get_bayes_data(cut_x, cut_y, test_size,min_num,m_num):   #cut_x,xut_y是经过分词后的二维数组
+    data_class_list = list(zip(cut_x, cut_y))  # zip压缩合并，将数据与标签对应压缩
+    random.shuffle(data_class_list)  # 将data_class_list乱序
+
+    test_size = test_size
+    index = int(len(data_class_list) * test_size) + 1  # 训练集和测试集切分的索引值
+    train_list = data_class_list[index:]  # 训练集
+    test_list = data_class_list[:index]  # 测试集
+    train_data_list, train_class_list = zip(*train_list)  # 训练集解压缩
+    test_data_list, test_class_list = zip(*test_list)  # 测试集解压缩
+
+    all_words_dict = {}  # 统计训练集词频
+    for word_list in train_data_list:
+        for word in word_list:
+            if word in all_words_dict.keys():
+                all_words_dict[word] += 1
+            else:
+                all_words_dict[word] = 1
+    for word_list in test_data_list:
+        for word in word_list:
+            if word in all_words_dict.keys():
+                all_words_dict[word] += 1
+            else:
+                all_words_dict[word] = 1
+    # 根据键的值倒序排序
+    print("词典大小：",len(all_words_dict.keys()))
+#     print(sorted(all_words_dict.items(),key=lambda x:x[1],reverse=True))
+
+    all_words_tuple_list = sorted(all_words_dict.items(), key=lambda f: f[1], reverse=True)
+    all_words_list, all_words_nums = zip(*all_words_tuple_list)  # 解压缩
+    all_words_list = list(all_words_list)  # 转换成列表
+    # The Process Result: all_words_list, train_data_list, test_data_list, train_class_list, test_class_list
+    # 一共198个词？
+    deleteN = 0
+    feature_words = words_dict(all_words_list, all_words_nums, deleteN,min_num,m_num)
+    # print("len of word set:",len(all_words_dict))
+    # train_feature_list, test_feature_list = TextFeatures(train_data_list, test_data_list, feature_words)
+
+    return train_data_list, train_class_list,test_data_list, test_class_list, feature_words
+
+
+def bayes_classifier(cut_x, cut_y, test_size,min_num,m_num):
+    train_data_list, train_class_list,test_data_list, test_class_list, feature_words = get_bayes_data(cut_x, cut_y, test_size,min_num,m_num)
+    train_feature_list, test_feature_list = TextFeatures(train_data_list, test_data_list, feature_words)
+    
+    print("MultinomialNB")
+    print(len(train_feature_list))
+    print(len(test_feature_list))
+    classifier = MultinomialNB().fit(train_feature_list, train_class_list)
+    # test_accuracy = classifier.score(test_feature_list, test_class_list)
+    pred_res = classifier.predict(test_feature_list)
+    for i in range(100):
+        print(pred_res[i],test_class_list[i])
+    
+#     import openpyxl
+
+#     outwb = openpyxl.Workbook()  # 打开一个将写的文件
+#     outws = outwb.create_sheet(index=0)  # 在将写的文件创建sheet
+
+#     i = 1  # 注意：'cell'函数中行列起始值为1
+#     for i in range(len(test_feature_list)): 
+#             outws.cell(column = 1 , row = i+1 , value = test_class_list[i])  
+#             outws.cell(column = 2 , row = i+1 , value = pred_res[i])  
+#     savexlsx = "resdata.xlsx"
+#     outwb.save(savexlsx)  # 保存结果
+
+#     from sklearn.naive_bayes import BernoulliNB
+    print("precision_score：", precision_score(test_class_list, pred_res, average='macro'))
+    print("recall_score：", recall_score(test_class_list, pred_res, average='macro'))
+    print("f1_score：", f1_score(test_class_list, pred_res, average='macro'))
+    
+    
+    print("BernoulliNB")
+    classifier = BernoulliNB().fit(train_feature_list, train_class_list)
+    # test_accuracy = classifier.score(test_feature_list, test_class_list)
+    pred_res = classifier.predict(test_feature_list)
+    print("precision_score：", precision_score(test_class_list, pred_res, average='macro'))
+    print("recall_score：", recall_score(test_class_list, pred_res, average='macro'))
+    print("f1_score：", f1_score(test_class_list, pred_res, average='macro'))
+    
+    from sklearn.naive_bayes import ComplementNB
+    print("ComplementNB")
+    classifier = ComplementNB().fit(train_feature_list, train_class_list)
+    # test_accuracy = classifier.score(test_feature_list, test_class_list)
+    pred_res = classifier.predict(test_feature_list)
+    print("precision_score：", precision_score(test_class_list, pred_res, average='macro'))
+    print("recall_score：", recall_score(test_class_list, pred_res, average='macro'))
+    print("f1_score：", f1_score(test_class_list, pred_res, average='macro'))
+       
